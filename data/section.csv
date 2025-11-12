@@ -1,0 +1,5 @@
+id,content
+sec_cpu_1,La CPU contiene la ALU y la unidad de control.
+sec_cpu_2,Los registros almacenan datos temporales.
+sec_alg_1,Complejidad: analiza tiempo y espacio.
+sec_db_1,Modelo relacional y SQL como lenguaje declarativo.
