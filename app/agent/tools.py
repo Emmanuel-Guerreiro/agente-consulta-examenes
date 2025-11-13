@@ -260,11 +260,16 @@ def gather_sources_for_summary(query: str, k_docs: int = 5, k_sections: int = 8,
 	sources.sort(key=lambda x: x["score"], reverse=True)
 	return sources[:max_sources]
 
-def find_topic_by_text(text: str) -> Optional[Dict[str, Any]]:
+def find_topic_by_text(text: str, min_similarity: float = 0.9) -> Optional[Dict[str, Any]]:
 	"""
 	Find the most relevant Topic for the given text using vector search (index if available, else in-app).
-	Returns {id, nombre, score} or None.
+	Returns {id, nombre, score} or None if no topic meets the minimum similarity threshold.
+	
+	Args:
+		text: The text to search for
+		min_similarity: Minimum similarity score (0.0-1.0) required to return a topic. Default: 0.8
 	"""
+	import sys
 	cfg = get_config()
 	q_vec = _embed.embed(text)
 	use_index = cfg.use_vector_index
@@ -281,7 +286,17 @@ def find_topic_by_text(text: str) -> Optional[Dict[str, Any]]:
 			records = run_query(cypher, {"vec": q_vec})
 			first = records[0] if records else None
 			if first:
-				return {"id": first["id"], "nombre": first.get("nombre") or "", "score": float(first["score"])}
+				score = float(first["score"])
+				topic_name = first.get("nombre") or ""
+				# Only return if similarity meets threshold
+				if score >= min_similarity:
+					if sys.stdout.isatty():
+						print(f"[DEBUG] find_topic_by_text('{text}') -> '{topic_name}' (score: {score:.3f} >= {min_similarity})", file=sys.stderr)
+					return {"id": first["id"], "nombre": topic_name, "score": score}
+				else:
+					if sys.stdout.isatty():
+						print(f"[DEBUG] find_topic_by_text('{text}') -> '{topic_name}' REJECTED (score: {score:.3f} < {min_similarity})", file=sys.stderr)
+					return None
 		except Neo4jError:
 			pass
 	# Fallback in-app cosine
@@ -296,10 +311,25 @@ def find_topic_by_text(text: str) -> Optional[Dict[str, Any]]:
 		sim = _cosine(q_vec, vec)
 		candidates.append((r["id"], sim, r.get("nombre") or ""))
 	if not candidates:
+		if sys.stdout.isatty():
+			print(f"[DEBUG] find_topic_by_text('{text}') -> NO CANDIDATES FOUND", file=sys.stderr)
 		return None
 	candidates.sort(key=lambda x: x[1], reverse=True)
 	top = candidates[0]
-	return {"id": top[0], "nombre": top[2], "score": float(top[1])}
+	score = top[1]
+	topic_name = top[2]
+	# Only return if similarity meets threshold
+	if score >= min_similarity:
+		if sys.stdout.isatty():
+			print(f"[DEBUG] find_topic_by_text('{text}') -> '{topic_name}' (score: {score:.3f} >= {min_similarity})", file=sys.stderr)
+		return {"id": top[0], "nombre": topic_name, "score": float(score)}
+	else:
+		if sys.stdout.isatty():
+			print(f"[DEBUG] find_topic_by_text('{text}') -> '{topic_name}' REJECTED (score: {score:.3f} < {min_similarity})", file=sys.stderr)
+			# Show top 3 candidates for debugging
+			top_3 = [(name, f"{sim:.3f}") for _, sim, name in candidates[:3]]
+			print(f"[DEBUG] Top 3 candidates: {top_3}", file=sys.stderr)
+		return None
 
 
 def get_student_knowledge(legajo: str, topic_term: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -316,15 +346,173 @@ def get_student_knowledge(legajo: str, topic_term: Optional[str] = None) -> List
 	records = run_query(cypher, {"legajo": legajo, "term": topic_term})
 	return [dict(r) for r in records]
 
+def get_all_topics() -> List[Dict[str, str]]:
+	"""
+	Get all available topics in the database.
+	Returns a list of {id, nombre} dictionaries.
+	"""
+	cypher = """
+	MATCH (t:Topic)
+	RETURN t.id AS id, t.nombre AS nombre
+	ORDER BY t.nombre
+	"""
+	records = run_query(cypher, {})
+	return [{"id": r["id"], "nombre": r.get("nombre") or ""} for r in records]
+
+
+def vector_search_exercises(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+	"""
+	Busca ejercicios por contenido usando vectorización.
+	Returns: [{id, task, difficulty, topic_id, topic_nombre, score}]
+	"""
+	cfg = get_config()
+	q_vec = _embed.embed(query)
+	
+	results: List[Tuple[str, float]] = []
+	
+	use_index = cfg.use_vector_index
+	if use_index is None:
+		use_index = True
+	
+	if use_index:
+		try:
+			cypher = """
+			CALL db.index.vector.queryNodes('exercise_vector', $k, $vec)
+			YIELD node, score
+			RETURN node.id AS id, score
+			"""
+			records = run_query(cypher, {"k": top_k, "vec": q_vec})
+			results = [(r["id"], r["score"]) for r in records]
+		except Neo4jError:
+			results = []
+	
+	if not results:
+		# Fallback: buscar ejercicios con vectores y calcular similitud
+		cypher = """
+		MATCH (e:Exercise)
+		WHERE exists(e.vector) AND e.vector IS NOT NULL
+		RETURN e.id AS id, e.vector AS vec
+		"""
+		records = run_query(cypher, {})
+		candidates: List[Tuple[str, float]] = []
+		for r in records:
+			ex_id = r["id"]
+			vec = r["vec"]
+			sim = _cosine(q_vec, vec)
+			candidates.append((ex_id, sim))
+		candidates.sort(key=lambda x: x[1], reverse=True)
+		results = candidates[:top_k]
+	
+	if not results:
+		return []
+	
+	# Obtener información de los ejercicios y sus temas
+	ex_ids = [ex_id for ex_id, _ in results]
+	cypher = """
+	MATCH (e:Exercise)-[:BELONGS_TO]->(t:Topic)
+	WHERE e.id IN $ids
+	RETURN e.id AS id, e.task AS task, e.difficulty AS difficulty, 
+	       t.id AS topic_id, t.nombre AS topic_nombre
+	"""
+	records = run_query(cypher, {"ids": ex_ids})
+	ex_map: Dict[str, Dict[str, Any]] = {}
+	for r in records:
+		ex_map[r["id"]] = {
+			"id": r["id"],
+			"task": r.get("task") or "",
+			"difficulty": float(r.get("difficulty") or 0.0),
+			"topic_id": r.get("topic_id"),
+			"topic_nombre": r.get("topic_nombre") or "",
+		}
+	
+	# Adjuntar scores preservando el orden
+	out: List[Dict[str, Any]] = []
+	for ex_id, score in results:
+		if ex_id in ex_map:
+			item = ex_map[ex_id]
+			item["score"] = float(score)
+			out.append(item)
+	
+	return out
+
+
 def recommend_exercises(legajo: str, topic_text: str, limit: int = 5) -> Dict[str, Any]:
 	"""
 	Recommend exercises for a topic near the student's knowledge level (±0.3).
+	Si no encuentra el tema directamente, busca ejercicios por contenido y deduce el tema.
 	Fallback to above-level exercises if none in range.
 	Returns {ok, topic_id, topic_nombre, level, exercises: [{id, task, difficulty}]}
 	"""
+	# Log the search for debugging
+	import sys
+	if sys.stdout.isatty():
+		print(f"[DEBUG] recommend_exercises searching for topic: '{topic_text}'", file=sys.stderr)
+	
 	topic = find_topic_by_text(topic_text)
+	found_exercises_by_content = None
+	
+	# Si no encuentra el tema, buscar ejercicios por contenido
 	if not topic:
-		return {"ok": False, "error": "No se encontró un tema relacionado."}
+		if sys.stdout.isatty():
+			print(f"[DEBUG] Topic not found directly, searching exercises by content...", file=sys.stderr)
+		
+		# Buscar ejercicios relacionados con el término
+		exercises_by_content = vector_search_exercises(topic_text, top_k=limit * 3)
+		
+		if exercises_by_content:
+			# Agrupar ejercicios por tema
+			topic_exercises: Dict[str, List[Dict[str, Any]]] = {}
+			for ex in exercises_by_content:
+				topic_id = ex.get("topic_id")
+				if topic_id:
+					if topic_id not in topic_exercises:
+						topic_exercises[topic_id] = []
+					topic_exercises[topic_id].append(ex)
+			
+			# Tomar el tema con más ejercicios relevantes
+			if topic_exercises:
+				best_topic_id = max(topic_exercises.keys(), key=lambda tid: len(topic_exercises[tid]))
+				best_exercises = topic_exercises[best_topic_id]
+				
+				# Obtener información del tema
+				cypher = """
+				MATCH (t:Topic {id: $tid})
+				RETURN t.id AS id, t.nombre AS nombre
+				"""
+				topic_records = run_query(cypher, {"tid": best_topic_id})
+				if topic_records:
+					topic = {
+						"id": topic_records[0]["id"],
+						"nombre": topic_records[0].get("nombre") or "",
+						"score": best_exercises[0].get("score", 0.0) if best_exercises else 0.0
+					}
+					found_exercises_by_content = best_exercises
+					
+					if sys.stdout.isatty():
+						print(f"[DEBUG] Found topic '{topic['nombre']}' via exercise search with {len(best_exercises)} exercises", file=sys.stderr)
+	
+	# Si aún no encuentra tema, devolver error
+	if not topic:
+		# Get all available topics to show to the user
+		available_topics = get_all_topics()
+		topic_names = [t["nombre"] for t in available_topics]
+		if topic_names:
+			error_msg = (
+				f"No se encontró un tema relacionado con '{topic_text}'. "
+				f"Los temas disponibles son: {', '.join(topic_names)}. "
+				f"Por favor, intenta con uno de estos temas."
+			)
+		else:
+			error_msg = f"No se encontró un tema relacionado con '{topic_text}' y no hay temas disponibles en la base de datos."
+		
+		if sys.stdout.isatty():
+			print(f"[DEBUG] Topic not found. Available topics: {topic_names}", file=sys.stderr)
+		
+		return {"ok": False, "error": error_msg}
+	
+	# Log the found topic for debugging
+	if sys.stdout.isatty():
+		print(f"[DEBUG] Topic found: {topic.get('nombre')} (id: {topic.get('id')}, score: {topic.get('score', 0):.3f})", file=sys.stderr)
 	topic_id = topic["id"]
 	topic_nombre = topic.get("nombre") or ""
 
@@ -336,17 +524,64 @@ def recommend_exercises(legajo: str, topic_text: str, limit: int = 5) -> Dict[st
 	records = run_query(cypher_level, {"legajo": legajo, "tid": topic_id})
 	level = float(records[0]["level"]) if records else 0.0
 
+	# Si encontramos ejercicios por contenido, usarlos y filtrarlos por nivel
+	if found_exercises_by_content:
+		if sys.stdout.isatty():
+			print(f"[DEBUG] Using exercises found by content search, filtering by level {level}", file=sys.stderr)
+		
+		min_level = max(0.0, level - 0.4)
+		max_level = min(1.0, level + 0.4)
+		
+		# Filtrar ejercicios por nivel del estudiante
+		filtered_exercises = [
+			{
+				"id": ex["id"],
+				"task": ex["task"],
+				"answer": ex.get("answer"),  # Puede ser None
+				"difficulty": ex["difficulty"]
+			}
+			for ex in found_exercises_by_content
+			if min_level <= ex["difficulty"] <= max_level
+		]
+		
+		# Si hay ejercicios filtrados, ordenarlos por relevancia (score) y luego por diferencia de nivel
+		if filtered_exercises:
+			filtered_exercises.sort(key=lambda x: abs(x["difficulty"] - level))
+			exercises = filtered_exercises[:limit]
+		else:
+			# Si no hay ejercicios en el rango, tomar los más cercanos al nivel
+			found_exercises_by_content.sort(key=lambda x: (abs(x["difficulty"] - level), -x.get("score", 0.0)))
+			exercises = [
+				{
+					"id": ex["id"],
+					"task": ex["task"],
+					"answer": ex.get("answer"),
+					"difficulty": ex["difficulty"]
+				}
+				for ex in found_exercises_by_content[:limit]
+			]
+		
+		return {
+			"ok": True,
+			"topic_id": topic_id,
+			"topic_nombre": topic_nombre,
+			"level": level,
+			"exercises": exercises,
+		}
+
+	# Búsqueda normal por tema
 	min_level = max(0.0, level - 0.4)
 	max_level = min(1.0, level + 0.4)
 
-	print(f"Will find exercises for topic {topic_id} with level within {min_level} to {max_level} and level {level}")
+	if sys.stdout.isatty():
+		print(f"[DEBUG] Will find exercises for topic {topic_id} with level within {min_level} to {max_level} and level {level}", file=sys.stderr)
     
-	# Primary: within ±0.3
+	# Primary: within ±0.4
 	cypher_primary = """
 	MATCH (t:Topic {id: $tid})<-[:BELONGS_TO]-(e:Exercise)
 	WITH e, $level AS lvl, toFloat(e.difficulty) AS diff
 	WHERE diff >= $min AND diff <= $max
-	RETURN e.id AS id, e.task AS task, diff AS difficulty
+	RETURN e.id AS id, e.task AS task, e.answer AS answer, diff AS difficulty
 	ORDER BY abs(diff - lvl) ASC
 	LIMIT toInteger($limit)
 	"""
@@ -364,7 +599,7 @@ def recommend_exercises(legajo: str, topic_text: str, limit: int = 5) -> Dict[st
 		MATCH (t:Topic {id: $tid})<-[:BELONGS_TO]-(e:Exercise)
 		WITH e, toFloat(e.difficulty) AS diff
 		WHERE diff > $level
-		RETURN e.id AS id, e.task AS task, diff AS difficulty
+		RETURN e.id AS id, e.task AS task, e.answer AS answer, diff AS difficulty
 		ORDER BY diff ASC
 		LIMIT toInteger($limit)
 		"""

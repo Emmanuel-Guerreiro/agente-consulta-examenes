@@ -1,4 +1,115 @@
 id,content
-topic_cpu,CPU
-topic_alg,Algoritmos
-topic_db,Bases de Datos
+topic_arquitectura_de_las_computadoras,Contenido general 
+topic_sistemas_numeracion,Sistemas de numeración
+topic_confiabilidad,Confiabilidad
+topic_costo,Costo del sistema
+topic_sistema_binario,Sistema binario
+topic_conversion_bases,Conversión entre bases
+topic_complementos,Complementos binarios
+topic_negativos_binario,Números negativos en binario
+topic_punto_fijo,Punto fijo
+topic_punto_flotante,Punto flotante
+topic_ieee754,Norma IEEE 754
+topic_codigos_introduccion,Introducción a los códigos
+topic_codigos_binarios,Códigos binarios
+topic_codigos_bcd,Códigos BCD
+topic_codigos_alfanumericos,Códigos alfanuméricos
+topic_codigos_detectores,Detectores de error
+topic_distancia_minima,Distancia mínima
+topic_codigos_paridad,Paridad
+topic_codigos_correctores,Códigos correctores
+topic_hamming,Código Hamming
+topic_crc,CRC
+topic_lrc,LRC
+topic_codigos_bidimensionales,Códigos bidimensionales
+topic_encriptacion,Encriptación
+topic_sustitucion,Cifrado por sustitución
+topic_permutacion,Cifrado por permutación
+topic_des,DES
+topic_rsa,RSA
+topic_codigos_barras,Códigos de barras
+topic_codigos_qr,Códigos QR
+topic_algebra_boole,Álgebra de Boole
+topic_postulados_boole,Postulados de Boole
+topic_teoremas_boole,Teoremas de Boole
+topic_funciones_logicas,Funciones lógicas
+topic_karnaugh,Mapa de Karnaugh
+topic_compuertas_logicas,Compuertas lógicas
+topic_sistemas_digitales,Sistemas digitales
+topic_sistemas_combinacionales,Sistemas combinacionales
+topic_combinacionales_msi,Sistemas MSI
+topic_codificadores,Codificadores
+topic_decodificadores,Decodificadores
+topic_multiplexores,Multiplexores
+topic_demultiplexores,Demultiplexores
+topic_comparadores,Comparadores
+topic_paridad_generadores,Generadores de paridad
+topic_sumadores,Sumadores
+topic_ual,ALU
+topic_sistemas_secuenciales,Sistemas secuenciales
+topic_biestables,Biestables
+topic_biestables_asincronicos,Biestables asincrónicos
+topic_biestables_sincronicos,Biestables síncronos
+topic_biestable_jk,Biestable JK
+topic_biestable_t,Biestable T
+topic_biestable_d,Biestable D
+topic_registros_desplazamiento,Registros de desplazamiento
+topic_transferencias_registros,Transferencias entre registros
+topic_contadores,Contadores
+topic_mult_div_binaria,Multiplicación y división binaria
+topic_memorias_visgeneral,Memorias electrónicas
+topic_memorias_clasificacion,Clasificación de memorias
+topic_ram_definicion,Memoria RAM
+topic_ram_rw,RAM lectura/escritura
+topic_rom,Memorias ROM
+topic_ram_extension,Extensión de palabra
+topic_memorias_serie,Memorias serie
+topic_fifo,Memoria FIFO
+topic_lifo,Memoria LIFO
+topic_arq_vonneumann,Arquitectura Von Neumann
+topic_maquina_elemental_intro,Introducción a máquina elemental
+topic_maquina_elemental_arq,Arquitectura elemental
+topic_maquina_elemental_instrucciones,Conjunto de instrucciones
+topic_maquina_elemental_ciclo,Ciclo de máquina
+topic_maquina_elemental_flujo,Flujo de información
+topic_unidad_control,Unidad de control
+topic_uc_microprogramada,Unidad de control microprogramada
+topic_bus_elemental,Bus de la máquina elemental
+topic_ual_elemental,UAL elemental
+topic_arq_conv_formato_instrucciones,Formato de instrucciones
+topic_mod_dir,Modos de direccionamiento
+topic_registros_nuevos,Registros nuevos
+topic_maquina_indexada,Máquina indexada
+topic_arq_conv_evolucion,Evolución a arquitectura convencional
+topic_8088_intro,Microprocesador 8088
+topic_8088_diagramas,Diagramas del 8088
+topic_arq_avanzada_vision,Visión de arquitectura avanzada
+topic_pipeline_intro,Pipeline
+topic_pipeline_prediccion,Predicción de saltos
+topic_pipeline_elemental,Pipeline elemental
+topic_cache_localidad,Principio de localidad
+topic_cache_manejo,Manejo de caché
+topic_dma_controlador,Controlador DMA
+topic_dma_scanner,Scanner DMA
+topic_cisc,CISC
+topic_risc,RISC
+topic_cisc_vs_risc,Comparación CISC vs RISC
+topic_procesador_80486,Procesador 80486
+topic_procesador_pentium,Procesador Pentium
+topic_es_modulos,Módulos de E/S
+topic_es_modulo,Módulo de E/S
+topic_es_diagrama,Diagrama de E/S
+topic_es_tecnicas,Técnicas de E/S
+topic_es_ejemplo,Ejemplo de módulo de E/S
+topic_es_canales,Canales de E/S
+topic_datos_seniales,Datos y señales
+topic_ancho_banda,Ancho de banda
+topic_senalizacion,Señalización
+topic_interfaces,Interfaces serie y paralela
+topic_punto_a_punto,Punto a punto y multipunto
+topic_medios_enlace,Medios de enlace
+topic_usb,Puerto USB
+topic_ethernet,Puerto Ethernet
+topic_bluetooth,Puerto Bluetooth
+topic_hdmi,Puerto HDMI
+topic_wifi,Puerto WiFi

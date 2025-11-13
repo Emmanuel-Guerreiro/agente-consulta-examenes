@@ -10,7 +10,25 @@ from app.agent.tools import ensure_vector_indexes
 def apply_constraints() -> None:
 	with open("app/db/schema.cypher", "r", encoding="utf-8") as f:
 		cypher = f.read()
-	for stmt in [s.strip() for s in cypher.split(";") if s.strip()]:
+	# Split by semicolon and filter out comments and empty lines
+	statements = []
+	for s in cypher.split(";"):
+		stmt = s.strip()
+		# Skip empty statements and comments (lines starting with //)
+		if stmt and not stmt.startswith("//"):
+			# Remove inline comments
+			lines = []
+			for line in stmt.split("\n"):
+				line = line.strip()
+				if line and not line.startswith("//"):
+					# Remove trailing comments
+					if "//" in line:
+						line = line[:line.index("//")].strip()
+					if line:
+						lines.append(line)
+			if lines:
+				statements.append("\n".join(lines))
+	for stmt in statements:
 		run_query(stmt)
 
 
